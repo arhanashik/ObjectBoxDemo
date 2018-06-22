@@ -2,23 +2,29 @@ package com.blackspider.objectboxdemo.ui.main
 
 import android.os.Bundle
 import android.support.design.widget.FloatingActionButton
+import android.support.v7.app.AlertDialog
 import android.support.v7.app.AppCompatActivity
 import android.support.v7.widget.LinearLayoutManager
 import android.support.v7.widget.RecyclerView
 import android.support.v7.widget.Toolbar
+import android.text.TextUtils
+import android.view.LayoutInflater
 import android.view.Menu
 import android.view.MenuItem
+import android.view.View
+import android.widget.Button
+import android.widget.EditText
 import android.widget.Toast
 import com.blackspider.AppController
 import com.blackspider.objectboxdemo.data.local.note.Note
 import com.blackspider.objectboxdemo.R
+import com.blackspider.objectboxdemo.data.local.dbstorage.ObjectBoxProvider
 import com.blackspider.objectboxdemo.data.local.note.Note_
 import io.objectbox.Box
 import io.objectbox.BoxStore
 
 class MainActivity : AppCompatActivity() {
-    private lateinit var store: BoxStore
-    private lateinit var noteBox: Box<Note>
+    private lateinit var boxProvider: ObjectBoxProvider
 
     private lateinit var rvNotes: RecyclerView
 
@@ -28,21 +34,13 @@ class MainActivity : AppCompatActivity() {
         val toolbar = findViewById<Toolbar>(R.id.toolbar)
         setSupportActionBar(toolbar)
 
-        store = (application as AppController).boxStore
-        noteBox = store.boxFor(Note::class.java)
+        boxProvider = ObjectBoxProvider((application as AppController))
 
         rvNotes = findViewById(R.id.rv_notes)
         initRecyclerView()
 
         findViewById<FloatingActionButton>(R.id.fab).setOnClickListener {
-            val note = Note(
-                    title = "First title",
-                    note = "First note",
-                    date = System.currentTimeMillis()
-            )
-            val inserted = insertUpdateNote(note)
-
-            Toast.makeText(this, "inserted: $inserted", Toast.LENGTH_SHORT).show()
+            createNote()
         }
     }
 
@@ -64,35 +62,43 @@ class MainActivity : AppCompatActivity() {
     
     private fun initRecyclerView() {
         rvNotes.layoutManager = LinearLayoutManager(this)
-        rvNotes.adapter = NoteAdapter(getNotes())
+        rvNotes.adapter = NoteAdapter(boxProvider.getNotes())
     }
 
-    private fun insertUpdateNote(note: Note): Long {
-        return noteBox.put(note)
-    }
+    private fun createNote(){
+        val dialogView = layoutInflater.inflate(R.layout.prompt_ask_question, null)
+        val etTitle = dialogView.findViewById<EditText>(R.id.et_title)
+        val etNote = dialogView.findViewById<EditText>(R.id.et_note)
+        val btnCreate = dialogView.findViewById<Button>(R.id.btn_create)
 
-    private fun getNote(id: Long): Note {
-        return noteBox.get(id)
-    }
+        val builder = AlertDialog.Builder(this)
+        builder.setView(dialogView)
+        val dialog = builder.create()
 
-    private fun getNotes(): List<Note>{
-        return noteBox.all
-    }
+        btnCreate.setOnClickListener({
+            var title = etTitle.text.toString()
+            val note = etNote.text.toString()
 
-    private fun findNotes(searchKey: String): List<Note>{
-        val builder = noteBox.query()
-        builder.contains(Note_.note, searchKey)
+            if(TextUtils.isEmpty(note)) Toast.makeText(this, "Please write something", Toast.LENGTH_SHORT).show()
+            else {
+                dialog.dismiss()
 
-        return builder.build().find()
-    }
+                if(TextUtils.isEmpty(title)) title = "Untitled"
 
-    private fun delete(id: Long){
+                val noteInstance = Note(
+                        title = title,
+                        note = note,
+                        date = System.currentTimeMillis()
+                )
 
-        return noteBox.remove(id)
-    }
+                val saved = if(boxProvider.insertUpdateNote(noteInstance) > 0) "Saved successfully" else "Failed to save"
 
-    private fun delete(note: Note){
+                Toast.makeText(this, saved, Toast.LENGTH_SHORT).show()
 
-        return noteBox.remove(note)
+                initRecyclerView()
+            }
+        })
+
+        dialog.show()
     }
 }
